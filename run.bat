@@ -1,49 +1,50 @@
 @echo off
 chcp 65001 >nul
+cls
 echo.
-echo ╔════════════════════════════════════════════════════════════╗
-echo ║   Discord Username Checker v2.0 Bot Edition - Запуск       ║
-echo ╚════════════════════════════════════════════════════════════╝
+echo ============================================================
+echo    Discord Username Checker v2.0 Bot Edition - Launch
+echo ============================================================
 echo.
 
-REM Проверка Python
-echo [*] Проверка Python...
+REM Check Python
+echo [*] Checking Python...
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [!] Python не найден! Пожалуйста установите Python 3.8+
-    echo [!] Скачайте с https://www.python.org/downloads/
+    echo [!] Python not found! Please install Python 3.8+
+    echo [!] Download from https://www.python.org/downloads/
     pause
     exit /b 1
 )
-echo [✓] Python найден
+echo [OK] Python found
 echo.
 
-REM Проверка зависимостей
-echo [*] Проверка зависимостей...
+REM Check dependencies
+echo [*] Checking dependencies...
 python -c "import discord" >nul 2>&1
 if errorlevel 1 (
-    echo [!] Discord.py не установлен!
-    echo [*] Установка discord.py...
+    echo [!] Discord.py not installed!
+    echo [*] Installing discord.py and requests...
     pip install discord.py requests
     if errorlevel 1 (
-        echo [!] Ошибка при установке зависимостей!
+        echo [!] Error installing dependencies!
         pause
         exit /b 1
     )
-    echo [✓] Зависимости установлены
+    echo [OK] Dependencies installed
 ) else (
-    echo [✓] Все зависимости установлены
+    echo [OK] All dependencies installed
 )
 echo.
 
-REM Запуск приложения
-echo [*] Запуск Discord Username Checker v2.0...
+REM Launch application
+echo [*] Launching Discord Username Checker v2.0...
 echo.
 python main.py
 
 if errorlevel 1 (
     echo.
-    echo [!] Ошибка при запуске приложения!
+    echo [!] Error launching application!
     pause
     exit /b 1
 )
