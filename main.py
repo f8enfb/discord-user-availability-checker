@@ -11,7 +11,7 @@ class DiscordUsernameChecker:
     def __init__(self, root):
         self.root = root
         self.root.title("Discord Username Checker v1.0")
-        self.root.geometry("900x700")
+        self.root.geometry("900x750")
         self.root.resizable(False, False)
         
         # Переменные
@@ -61,29 +61,81 @@ class DiscordUsernameChecker:
         )
         char_combo.grid(row=0, column=1, sticky="w", padx=5)
         
-        # Минимальная длина
-        tk.Label(control_frame, text="Мин. длина:").grid(row=0, column=2, sticky="w", padx=(20, 0))
+        # Быстрое переключение длины
+        tk.Label(control_frame, text="Длина username:", font=("Arial", 10, "bold")).grid(
+            row=1, column=0, sticky="w", pady=10
+        )
+        
+        length_frame = tk.Frame(control_frame)
+        length_frame.grid(row=1, column=1, sticky="w", padx=5, pady=10)
+        
+        self.length_var = tk.IntVar(value=2)
+        
+        # Радиобаттоны для быстрого выбора
+        tk.Radiobutton(
+            length_frame,
+            text="2 символа",
+            variable=self.length_var,
+            value=2,
+            font=("Arial", 10),
+            command=self.update_length_mode
+        ).pack(side=tk.LEFT, padx=10)
+        
+        tk.Radiobutton(
+            length_frame,
+            text="3 символа",
+            variable=self.length_var,
+            value=3,
+            font=("Arial", 10),
+            command=self.update_length_mode
+        ).pack(side=tk.LEFT, padx=10)
+        
+        tk.Radiobutton(
+            length_frame,
+            text="4 символа",
+            variable=self.length_var,
+            value=4,
+            font=("Arial", 10),
+            command=self.update_length_mode
+        ).pack(side=tk.LEFT, padx=10)
+        
+        tk.Radiobutton(
+            length_frame,
+            text="Произвольная",
+            variable=self.length_var,
+            value=0,
+            font=("Arial", 10),
+            command=self.update_length_mode
+        ).pack(side=tk.LEFT, padx=10)
+        
+        # Произвольная длина (скрытая по умолчанию)
+        custom_length_frame = tk.Frame(control_frame)
+        custom_length_frame.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        tk.Label(custom_length_frame, text="Мин. длина:").pack(side=tk.LEFT, padx=5)
         self.min_len_var = tk.StringVar(value="2")
         min_len_spin = ttk.Spinbox(
-            control_frame,
+            custom_length_frame,
             from_=1,
             to=10,
             textvariable=self.min_len_var,
             width=5
         )
-        min_len_spin.grid(row=0, column=3, sticky="w", padx=5)
+        min_len_spin.pack(side=tk.LEFT, padx=5)
         
-        # Максимальная длина
-        tk.Label(control_frame, text="Макс. длина:").grid(row=0, column=4, sticky="w", padx=(20, 0))
+        tk.Label(custom_length_frame, text="Макс. длина:").pack(side=tk.LEFT, padx=20)
         self.max_len_var = tk.StringVar(value="4")
         max_len_spin = ttk.Spinbox(
-            control_frame,
+            custom_length_frame,
             from_=1,
             to=10,
             textvariable=self.max_len_var,
             width=5
         )
-        max_len_spin.grid(row=0, column=5, sticky="w", padx=5)
+        max_len_spin.pack(side=tk.LEFT, padx=5)
+        
+        self.custom_length_frame = custom_length_frame
+        self.custom_length_frame.pack_forget()  # Скрыть по умолчанию
         
         # Кнопки управления
         button_frame = tk.Frame(self.root)
@@ -144,7 +196,7 @@ class DiscordUsernameChecker:
         
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
-            height=20,
+            height=15,
             width=100,
             bg="#23272A",
             fg="#7289DA",
@@ -158,6 +210,15 @@ class DiscordUsernameChecker:
         self.log_text.tag_config("taken", foreground="#F04747")
         self.log_text.tag_config("error", foreground="#FAA61A")
         self.log_text.tag_config("info", foreground="#7289DA")
+    
+    def update_length_mode(self):
+        """Обновить режим длины"""
+        if self.length_var.get() == 0:
+            # Произвольная длина
+            self.custom_length_frame.pack(fill=tk.X, padx=5, pady=5)
+        else:
+            # Фиксированная длина
+            self.custom_length_frame.pack_forget()
     
     def log_message(self, message, tag="info"):
         """Добавить сообщение в лог"""
@@ -177,8 +238,14 @@ class DiscordUsernameChecker:
     def generate_username(self):
         """Генерировать случайный username"""
         char_set = self.char_sets[self.char_var.get()]
-        min_len = int(self.min_len_var.get())
-        max_len = int(self.max_len_var.get())
+        
+        if self.length_var.get() == 0:
+            # Произвольная длина
+            min_len = int(self.min_len_var.get())
+            max_len = int(self.max_len_var.get())
+        else:
+            # Фиксированная длина
+            min_len = max_len = self.length_var.get()
         
         length = random.randint(min_len, max_len)
         username = ''.join(random.choice(char_set) for _ in range(length))
@@ -216,8 +283,14 @@ class DiscordUsernameChecker:
     def checking_thread(self):
         """Поток для проверки username"""
         self.log_message("✅ Проверка запущена!", "info")
-        self.log_message(f"Параметры: {self.char_var.get()} | "
-                        f"Длина: {self.min_len_var.get()}-{self.max_len_var.get()}", "info")
+        
+        if self.length_var.get() == 0:
+            self.log_message(f"Параметры: {self.char_var.get()} | "
+                            f"Длина: {self.min_len_var.get()}-{self.max_len_var.get()} (произвольная)", "info")
+        else:
+            self.log_message(f"Параметры: {self.char_var.get()} | "
+                            f"Длина: {self.length_var.get()} символов", "info")
+        
         self.log_message("-" * 80, "info")
         
         while self.is_running:
