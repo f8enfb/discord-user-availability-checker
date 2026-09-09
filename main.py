@@ -3,15 +3,17 @@ from tkinter import ttk, scrolledtext, messagebox
 import threading
 import random
 import string
-import requests
+import discord
+from discord.ext import commands
+import asyncio
 import time
 from datetime import datetime
 
 class DiscordUsernameChecker:
     def __init__(self, root):
         self.root = root
-        self.root.title("Discord Username Checker v1.0")
-        self.root.geometry("900x750")
+        self.root.title("Discord Username Checker v2.0 - Bot Edition")
+        self.root.geometry("1000x800")
         self.root.resizable(False, False)
         
         # Переменные
@@ -19,6 +21,9 @@ class DiscordUsernameChecker:
         self.username_count = 0
         self.available_count = 0
         self.taken_count = 0
+        self.bot_token = ""
+        self.bot = None
+        self.guild_id = None
         
         # Символы для генерации
         self.char_sets = {
@@ -38,15 +43,44 @@ class DiscordUsernameChecker:
         
         title_label = tk.Label(
             title_frame, 
-            text="🔍 Discord Username Checker",
+            text="🔍 Discord Username Checker v2.0 - Bot Edition",
             font=("Arial", 16, "bold"),
             bg="#2C2F33",
             fg="#7289DA"
         )
         title_label.pack()
         
+        # Панель авторизации бота
+        auth_frame = tk.LabelFrame(self.root, text="🤖 Авторизация Discord Bot", padx=10, pady=10, fg="#7289DA")
+        auth_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        tk.Label(auth_frame, text="Discord Bot Token:").grid(row=0, column=0, sticky="w")
+        self.token_entry = tk.Entry(auth_frame, width=50, show="*")
+        self.token_entry.grid(row=0, column=1, sticky="ew", padx=5)
+        
+        tk.Label(auth_frame, text="ID Сервера (Guild ID):").grid(row=1, column=0, sticky="w", pady=5)
+        self.guild_entry = tk.Entry(auth_frame, width=50)
+        self.guild_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+        
+        self.connect_btn = tk.Button(
+            auth_frame,
+            text="🔗 Подключить Бота",
+            command=self.connect_bot,
+            bg="#43B581",
+            fg="white",
+            font=("Arial", 10, "bold"),
+            padx=20,
+            pady=8
+        )
+        self.connect_btn.grid(row=0, column=2, rowspan=2, padx=10)
+        
+        self.status_label = tk.Label(auth_frame, text="❌ Бот не подключен", fg="#F04747", font=("Arial", 10, "bold"))
+        self.status_label.grid(row=2, column=0, columnspan=3, pady=5)
+        
+        auth_frame.columnconfigure(1, weight=1)
+        
         # Панель управления
-        control_frame = tk.LabelFrame(self.root, text="Настройки", padx=10, pady=10)
+        control_frame = tk.LabelFrame(self.root, text="⚙️ Настройки", padx=10, pady=10)
         control_frame.pack(fill=tk.X, padx=10, pady=5)
         
         # Тип символов
@@ -149,7 +183,8 @@ class DiscordUsernameChecker:
             fg="white",
             font=("Arial", 10, "bold"),
             padx=20,
-            pady=8
+            pady=8,
+            state=tk.DISABLED
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
         
@@ -179,7 +214,7 @@ class DiscordUsernameChecker:
         self.clear_btn.pack(side=tk.LEFT, padx=5)
         
         # Статистика
-        stats_frame = tk.LabelFrame(self.root, text="Статистика", padx=10, pady=10)
+        stats_frame = tk.LabelFrame(self.root, text="📊 Статистика", padx=10, pady=10)
         stats_frame.pack(fill=tk.X, padx=10, pady=5)
         
         self.stats_label = tk.Label(
@@ -191,13 +226,13 @@ class DiscordUsernameChecker:
         self.stats_label.pack()
         
         # Лог
-        log_frame = tk.LabelFrame(self.root, text="Лог результатов", padx=10, pady=10)
+        log_frame = tk.LabelFrame(self.root, text="📝 Лог результатов", padx=10, pady=10)
         log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
             height=15,
-            width=100,
+            width=120,
             bg="#23272A",
             fg="#7289DA",
             font=("Courier", 9),
@@ -210,6 +245,55 @@ class DiscordUsernameChecker:
         self.log_text.tag_config("taken", foreground="#F04747")
         self.log_text.tag_config("error", foreground="#FAA61A")
         self.log_text.tag_config("info", foreground="#7289DA")
+        self.log_text.tag_config("success", foreground="#43B581")
+    
+    def connect_bot(self):
+        """Подключить Discord бота"""
+        token = self.token_entry.get().strip()
+        guild_id_str = self.guild_entry.get().strip()
+        
+        if not token:
+            messagebox.showerror("Ошибка", "Введите Discord Bot Token!")
+            return
+        
+        if not guild_id_str.isdigit():
+            messagebox.showerror("Ошибка", "Guild ID должен быть числом!")
+            return
+        
+        self.bot_token = token
+        self.guild_id = int(guild_id_str)
+        
+        # Запустить подключение в отдельном потоке
+        thread = threading.Thread(target=self.bot_connect_thread, daemon=True)
+        thread.start()
+    
+    def bot_connect_thread(self):
+        """Поток для подключения бота"""
+        try:
+            self.log_message("🔄 Подключение к Discord...", "info")
+            
+            # Создаем бота
+            intents = discord.Intents.default()
+            self.bot = commands.Bot(command_prefix="!", intents=intents)
+            
+            @self.bot.event
+            async def on_ready():
+                self.log_message(f"✅ Бот подключен как {self.bot.user}", "success")
+                self.status_label.config(text=f"✅ Бот подключен: {self.bot.user}", fg="#43B581")
+                self.start_btn.config(state=tk.NORMAL)
+                self.connect_btn.config(state=tk.DISABLED)
+            
+            # Запуск бота в цикле
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self.bot.start(self.bot_token))
+            
+        except discord.errors.LoginFailure:
+            self.log_message("❌ Ошибка: Неверный Discord Bot Token!", "error")
+            self.status_label.config(text="❌ Ошибка авторизации", fg="#F04747")
+        except Exception as e:
+            self.log_message(f"❌ Ошибка подключения: {str(e)}", "error")
+            self.status_label.config(text="❌ Ошибка подключения", fg="#F04747")
     
     def update_length_mode(self):
         """Обновить режим длины"""
@@ -251,33 +335,25 @@ class DiscordUsernameChecker:
         username = ''.join(random.choice(char_set) for _ in range(length))
         return username
     
-    def check_username_availability(self, username):
-        """Проверить доступность username"""
+    async def check_username_with_bot(self, username):
+        """Проверить доступность username через Discord Bot API"""
         try:
-            # Попытка найти пользователя через Discord API (поиск)
-            # Note: это косвенный метод проверки
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-            }
+            if not self.bot or not self.bot.user:
+                return None
             
-            # Метод 1: Проверка через Discord поиск
-            url = f"https://discord.com/api/v10/users/search?query={username}"
-            response = requests.get(url, headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("users") and len(data["users"]) > 0:
-                    for user in data["users"]:
-                        if user.get("username", "").lower() == username.lower():
-                            return False  # Занято
+            # Пытаемся найти пользователя по username
+            # Если найдем - значит занято, если нет - свободно
+            try:
+                user = await self.bot.fetch_user(username)
+                return False  # Занято
+            except discord.NotFound:
                 return True  # Свободно
-            
-            # Если API не работает, пытаемся через другой метод
-            time.sleep(0.1)  # Задержка для избежания rate limit
-            return None  # Неизвестно
-            
+            except Exception as e:
+                self.log_message(f"Ошибка при проверке '{username}': {str(e)}", "error")
+                return None
+                
         except Exception as e:
-            self.log_message(f"Ошибка при проверке '{username}': {str(e)}", "error")
+            self.log_message(f"Критическая ошибка: {str(e)}", "error")
             return None
     
     def checking_thread(self):
@@ -291,12 +367,17 @@ class DiscordUsernameChecker:
             self.log_message(f"Параметры: {self.char_var.get()} | "
                             f"Длина: {self.length_var.get()} символов", "info")
         
-        self.log_message("-" * 80, "info")
+        self.log_message("-" * 100, "info")
         
         while self.is_running:
             try:
                 username = self.generate_username()
-                result = self.check_username_availability(username)
+                
+                # Запускаем async функцию
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(self.check_username_with_bot(username))
+                loop.close()
                 
                 self.username_count += 1
                 
@@ -307,19 +388,23 @@ class DiscordUsernameChecker:
                     self.taken_count += 1
                     self.log_message(f"❌ ЗАНЯТ: {username}", "taken")
                 else:
-                    self.log_message(f"⚠️  НЕИЗВЕСТНО: {username}", "error")
+                    self.log_message(f"⚠️  ОШИБКА: {username}", "error")
                 
                 self.update_stats()
-                time.sleep(0.5)  # Задержка между запросами
+                time.sleep(1)  # Задержка между запросами
                 
             except Exception as e:
                 self.log_message(f"Критическая ошибка: {str(e)}", "error")
-                time.sleep(1)
+                time.sleep(2)
     
     def start_checking(self):
         """Запустить проверку"""
         if self.is_running:
             messagebox.showwarning("Предупреждение", "Проверка уже запущена!")
+            return
+        
+        if not self.bot or not self.bot.user:
+            messagebox.showerror("Ошибка", "Сначала подключите Discord бота!")
             return
         
         self.is_running = True
@@ -336,7 +421,7 @@ class DiscordUsernameChecker:
         self.start_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
         self.log_message("⏹ Проверка остановлена!", "info")
-        self.log_message("-" * 80, "info")
+        self.log_message("-" * 100, "info")
     
     def clear_log(self):
         """Очистить лог"""
